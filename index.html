@@ -3,210 +3,358 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sauve-moi si tu peux</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sauve-moi si tu peux 3D</title>
 <style>
 *{box-sizing:border-box}
-body{
-  margin:0;background:#09090d;color:#eee;
-  font-family:Arial,sans-serif;text-align:center;
-}
-main{max-width:520px;margin:auto;padding:20px}
-h1{color:#e63946;font-size:30px;text-shadow:0 0 15px red}
-h2{color:#f0b5b5}
-.scene{
-  background:linear-gradient(#17131c,#08080c);
-  border:1px solid #56333d;border-radius:16px;
-  padding:25px 15px;margin:20px 0;
-  min-height:180px;
-}
-#picture{font-size:65px;margin:12px}
-#story{line-height:1.6;min-height:65px}
-button{
-  display:block;width:100%;padding:15px;margin:10px 0;
-  border:1px solid #8d303c;border-radius:10px;
-  background:#28151c;color:white;font-size:16px;
-}
-button:active{background:#8d303c}
-#inventory{color:#f3c6a6;font-size:14px}
-.small{color:#aaa;font-size:13px}
+body{margin:0;overflow:hidden;background:#050608;color:white;font-family:Arial}
+canvas{display:block}
+#hud{position:fixed;inset:0;pointer-events:none}
+#title{position:absolute;top:12px;width:100%;text-align:center;color:#e8baba;text-shadow:0 0 12px red;font-size:19px;font-weight:bold}
+#message{position:absolute;top:55px;width:100%;text-align:center;font-size:14px;color:#ddd;text-shadow:0 2px 5px black;padding:0 15px}
+#cross{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;color:#ddd}
+#joystick{position:absolute;bottom:25px;left:25px;width:125px;height:125px;border:2px solid #aaa7;border-radius:50%;background:#ffffff12;pointer-events:auto;touch-action:none}
+#stick{position:absolute;width:48px;height:48px;left:36px;top:36px;border-radius:50%;background:#ddd9;box-shadow:0 0 10px #000}
+.action{position:absolute;right:20px;width:65px;height:65px;border-radius:50%;border:1px solid #aaa;background:#171717bb;color:white;font-size:12px;pointer-events:auto;touch-action:none}
+#run{bottom:30px}
+#use{bottom:110px}
+#light{bottom:190px}
+#help{position:absolute;bottom:5px;right:8px;font-size:10px;color:#aaa}
+#overlay{position:fixed;inset:0;background:#050608;display:flex;align-items:center;justify-content:center;text-align:center;padding:25px;z-index:5}
+#panel{max-width:420px}
+h1{color:#d83b48;text-shadow:0 0 18px #a00}
+#start{background:#761d28;color:white;border:1px solid #c55;padding:16px 30px;border-radius:10px;font-size:17px}
 </style>
 </head>
 <body>
-<main>
-<h1>SAUVE-MOI SI TU PEUX</h1>
-<p class="small">Une nuit. Une maison. Un monstre. Deux amoureux.</p>
-
-<div class="scene">
-  <h2 id="room">La maison abandonnée</h2>
-  <div id="picture">🏚️</div>
-  <p id="story">Julien reçoit un appel désespéré d'Émilie. Elle est enfermée dans une maison abandonnée. Il doit la retrouver avant qu'il ne soit trop tard...</p>
+<div id="overlay">
+ <div id="panel">
+  <h1>SAUVE-MOI SI TU PEUX</h1>
+  <p>Une maison abandonnée.<br>Un monstre dans l'obscurité.<br>Émilie attend Julien...</p>
+  <p>🔦 Trouve la clé et ouvre la porte avant que le monstre ne t'attrape.</p>
+  <button id="start">ENTRER DANS LA MAISON</button>
+  <p style="color:#999;font-size:12px">Utilise le joystick pour marcher et glisse ton doigt sur la droite pour regarder.</p>
+ </div>
+</div>
+<div id="hud">
+ <div id="title">SAUVE-MOI SI TU PEUX</div>
+ <div id="message">Trouve la clé rouge...</div>
+ <div id="cross">+</div>
+ <div id="joystick"><div id="stick"></div></div>
+ <button class="action" id="run">COURIR</button>
+ <button class="action" id="use">ACTION</button>
+ <button class="action" id="light">LAMPE</button>
+ <div id="help">Glisse à droite pour regarder</div>
 </div>
 
-<p id="inventory">🎒 Sac : vide</p>
-<div id="choices">
-  <button onclick="start()">COMMENCER L'AVENTURE</button>
-</div>
-<p class="small">🎮 Jeu créé avec amour et un peu de terreur ❤️</p>
-</main>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
-<script>
-let room="debut";
-let items=[];
-let monster=0;
-let started=false;
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x08090d);
+scene.fog=new THREE.FogExp2(0x08090d,0.045);
 
-function show(title,picture,story,buttons){
- document.getElementById("room").textContent=title;
- document.getElementById("picture").textContent=picture;
- document.getElementById("story").textContent=story;
- document.getElementById("choices").innerHTML="";
- buttons.forEach(b=>{
-  let btn=document.createElement("button");
-  btn.textContent=b.label;
-  btn.onclick=b.action;
-  document.getElementById("choices").appendChild(btn);
- });
- document.getElementById("inventory").textContent=
- "🎒 Sac : "+(items.length?items.join(" • "):"vide");
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.1,100);
+camera.position.set(0,1.7,5);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x78849b,0x17100c,.35));
+
+const moon=new THREE.DirectionalLight(0x8797b9,.45);
+moon.position.set(-5,9,4);
+moon.castShadow=true;
+scene.add(moon);
+
+const flashlight=new THREE.SpotLight(0xffe6bd,65,19,Math.PI/7,.45,1.3);
+flashlight.position.set(0,0,0);
+flashlight.castShadow=true;
+camera.add(flashlight);
+const target=new THREE.Object3D();
+target.position.set(0,0,-1);
+camera.add(target);
+flashlight.target=target;
+scene.add(camera);
+
+function mat(color,roughness=1){
+ return new THREE.MeshStandardMaterial({color,roughness});
+}
+const wallMat=mat(0x37312e);
+const floorMat=mat(0x282522);
+const darkMat=mat(0x111116);
+const woodMat=mat(0x493326);
+const redMat=mat(0x8d111b);
+
+function cube(x,y,z,w,h,d,material){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
+ m.position.set(x,y,z);
+ m.castShadow=true;
+ m.receiveShadow=true;
+ scene.add(m);
+ return m;
 }
 
-function start(){
+// Maison et couloir
+cube(0,-.15,0,18,.3,26,floorMat);
+cube(0,3,-13,18,6,.4,wallMat);
+cube(-9,3,0,.4,6,26,wallMat);
+cube(9,3,0,.4,6,26,wallMat);
+cube(0,3,13,18,6,.4,wallMat);
+
+// Plafond
+cube(0,6,0,18,.3,26,darkMat);
+
+// Cloisons pour former plusieurs pièces
+cube(-4.8,2.5,-5, .3,5,12,wallMat);
+cube(4.8,2.5,-5, .3,5,12,wallMat);
+cube(-2.8,2.5,-9,4,5,.3,wallMat);
+cube(2.8,2.5,-9,4,5,.3,wallMat);
+
+// Poutres
+for(let z=-11;z<12;z+=5){
+ cube(0,5.6,z,17,.25,.25,woodMat);
+}
+
+// Meubles abandonnés
+cube(-6,1,-3,2,2,.8,woodMat);
+cube(6,1,-6,2,2,1,woodMat);
+cube(-6,.5,5,2,1,1,woodMat);
+cube(6,1,7,2,2,1,woodMat);
+
+// Caisses
+for(let i=0;i<5;i++){
+ cube(-2+i*.9,.5,-2-i*.8,.7,1,.7,woodMat);
+}
+
+// Petite lumière rouge au fond
+const redLight=new THREE.PointLight(0xff1010,5,7);
+redLight.position.set(0,2,-11);
+scene.add(redLight);
+
+// Clé rouge
+const keyGroup=new THREE.Group();
+const ring=new THREE.Mesh(
+ new THREE.TorusGeometry(.16,.045,8,20),
+ new THREE.MeshStandardMaterial({color:0xff3333,metalness:.7,roughness:.3})
+);
+keyGroup.add(ring);
+const keyBar=cube(0,0,0,.38,.07,.07,redMat);
+keyBar.position.x=.25;
+keyGroup.add(keyBar);
+keyGroup.position.set(-6,1.5,-3);
+scene.add(keyGroup);
+
+// Porte de sortie
+const door=cube(0,1.7,-12.65,2.5,3.4,.25,woodMat);
+const knob=new THREE.Mesh(new THREE.SphereGeometry(.09),mat(0xc99c42,.3));
+knob.position.set(.85,1.6,-12.45);
+scene.add(knob);
+
+// Monstre
+const monster=new THREE.Group();
+const body=new THREE.Mesh(
+ new THREE.CapsuleGeometry(.48,.9,5,8),
+ mat(0x09080b)
+);
+body.position.y=1.1;
+monster.add(body);
+const head=new THREE.Mesh(
+ new THREE.SphereGeometry(.42,12,12),
+ mat(0x151015)
+);
+head.position.y=2;
+monster.add(head);
+for(let x of [-.16,.16]){
+ const eye=new THREE.Mesh(
+  new THREE.SphereGeometry(.055),
+  new THREE.MeshBasicMaterial({color:0xff1515})
+ );
+ eye.position.set(x,2.05,-.37);
+ monster.add(eye);
+}
+monster.position.set(0,0,-8);
+scene.add(monster);
+
+// Contrôles
+let yaw=0,pitch=0;
+let joyX=0,joyY=0;
+let running=false,hasKey=false,started=false,ended=false;
+let lampOn=true;
+const message=document.getElementById('message');
+const stick=document.getElementById('stick');
+const joystick=document.getElementById('joystick');
+
+function setMessage(t){message.textContent=t;}
+
+joystick.addEventListener('pointerdown',e=>{
+ joystick.setPointerCapture(e.pointerId);
+ moveJoy(e);
+});
+joystick.addEventListener('pointermove',e=>{
+ if(e.buttons)moveJoy(e);
+});
+function moveJoy(e){
+ const r=joystick.getBoundingClientRect();
+ let x=e.clientX-(r.left+r.width/2);
+ let y=e.clientY-(r.top+r.height/2);
+ const len=Math.hypot(x,y),max=43;
+ if(len>max){x=x/len*max;y=y/len*max}
+ joyX=x/max;joyY=y/max;
+ stick.style.transform=`translate(${x}px,${y}px)`;
+}
+function resetJoy(){
+ joyX=0;joyY=0;stick.style.transform='translate(0,0)';
+}
+joystick.addEventListener('pointerup',resetJoy);
+joystick.addEventListener('pointercancel',resetJoy);
+
+// Regarder autour avec le doigt sur la partie droite
+let lookId=null,lastX=0,lastY=0;
+renderer.domElement.addEventListener('pointerdown',e=>{
+ if(e.clientX>innerWidth*.38){
+  lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;
+  renderer.domElement.setPointerCapture(e.pointerId);
+ }
+});
+renderer.domElement.addEventListener('pointermove',e=>{
+ if(lookId===e.pointerId){
+  yaw-=(e.clientX-lastX)*.004;
+  pitch-=(e.clientY-lastY)*.003;
+  pitch=THREE.MathUtils.clamp(pitch,-1.1,1.1);
+  lastX=e.clientX;lastY=e.clientY;
+ }
+});
+renderer.domElement.addEventListener('pointerup',()=>lookId=null);
+renderer.domElement.addEventListener('pointercancel',()=>lookId=null);
+
+document.getElementById('run').onpointerdown=()=>running=true;
+document.getElementById('run').onpointerup=()=>running=false;
+document.getElementById('run').onpointerleave=()=>running=false;
+document.getElementById('light').onclick=()=>{
+ lampOn=!lampOn;
+ flashlight.intensity=lampOn?65:0;
+};
+
+// Clavier aussi
+const keys={};
+addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+
+const player=new THREE.Vector3(0,1.7,5);
+const forward=new THREE.Vector3();
+const right=new THREE.Vector3();
+const direction=new THREE.Vector3();
+const clock=new THREE.Clock();
+
+function distance(a,b){return a.distanceTo(b)}
+
+function action(){
+ if(!started||ended)return;
+ if(!hasKey&&distance(player,keyGroup.position)<2.1){
+  hasKey=true;
+  scene.remove(keyGroup);
+  setMessage("🔑 Tu as trouvé la clé rouge ! Va vers la porte...");
+  return;
+ }
+ if(distance(player,door.position)<3){
+  if(hasKey){
+   ended=true;
+   setMessage("❤️ JULIEN A RETROUVÉ ÉMILIE ! Vous avez survécu !");
+   document.getElementById('overlay').style.display='flex';
+   document.getElementById('panel').innerHTML=
+    "<h1>VOUS ÊTES RÉUNIS ❤️</h1><p>Julien a retrouvé Émilie et vous avez échappé au monstre !</p><button id='again'>RECOMMENCER</button>";
+   document.getElementById('again').onclick=()=>location.reload();
+  }else setMessage("La porte est verrouillée. Il te faut la clé rouge !");
+  return;
+ }
+ if(!hasKey&&distance(player,keyGroup.position)>2.1)
+  setMessage("Explore la maison. La clé rouge est quelque part...");
+}
+document.getElementById('use').onclick=action;
+
+document.getElementById('start').onclick=()=>{
  started=true;
- show("Le portail","🌧️",
- "Julien arrive devant la maison. La porte est entrouverte. Un bruit étrange vient de l'intérieur...",
- [
- {label:"🚪 Entrer dans la maison",action:hall},
- {label:"🔦 Regarder autour",action:outside}
- ]);
-}
+ document.getElementById('overlay').style.display='none';
+ setMessage("Trouve la clé rouge. Attention, quelque chose rôde...");
+};
 
-function outside(){
- show("Le jardin","🌳",
- "Julien trouve une vieille lampe torche près d'un arbre. Il entend quelqu'un murmurer son prénom...",
- [
- {label:"Prendre la lampe torche",action:()=>{
-  if(!items.includes("Lampe torche"))items.push("Lampe torche");
-  hall();
- }},
- {label:"Retourner à la porte",action:hall}
- ]);
-}
+function update(dt){
+ if(!started||ended)return;
 
-function hall(){
- show("Le hall","🚪",
- "La porte claque derrière Julien ! Il fait noir. Trois passages s'offrent à lui : la cuisine, le salon et l'escalier.",
- [
- {label:"🍽️ Explorer la cuisine",action:kitchen},
- {label:"🛋️ Explorer le salon",action:living},
- {label:"🪜 Monter à l'étage",action:upstairs}
- ]);
-}
+ const moveX=joyX+(keys['d']?1:0)-(keys['a']?1:0);
+ const moveY=joyY+(keys['s']?1:0)-(keys['w']?1:0);
 
-function kitchen(){
- if(items.includes("Petite clé")){
-  show("La cuisine","🍽️","Julien a déjà fouillé cette pièce. Un bruit de pas résonne dans le couloir.",[
-   {label:"Retour au hall",action:hall}
-  ]);
-  return;
+ camera.rotation.order='YXZ';
+ camera.rotation.set(pitch,yaw,0);
+
+ forward.set(-Math.sin(yaw),0,-Math.cos(yaw));
+ right.set(Math.cos(yaw),0,-Math.sin(yaw));
+ direction.set(0,0,0);
+ direction.addScaledVector(right,moveX);
+ direction.addScaledVector(forward,-moveY);
+
+ if(direction.length()>1)direction.normalize();
+ const speed=(running||keys['shift']?5.2:2.7)*dt;
+ player.addScaledVector(direction,speed);
+
+ // Limites de la maison
+ player.x=THREE.MathUtils.clamp(player.x,-8,8);
+ player.z=THREE.MathUtils.clamp(player.z,-12,12);
+
+ // Quelques cloisons
+ if(Math.abs(player.x)>4.5&&player.z<-3&&player.z>-11){
+  player.x=Math.sign(player.x)*4.5;
  }
- show("La cuisine","🍽️",
- "Des assiettes sont cassées sur le sol. Dans un tiroir, Julien aperçoit une petite clé.",
- [
- {label:"🔑 Prendre la petite clé",action:()=>{
-  items.push("Petite clé");hall();
- }},
- {label:"Retour au hall",action:hall}
- ]);
-}
 
-function living(){
- show("Le salon","🛋️",
- "Une télévision s'allume toute seule. Sur l'écran, un message apparaît : JULIEN, NE MONTE PAS...",
- [
- {label:"📺 Examiner la télévision",action:()=>{
-  show("Le salon","📺","Une voix murmure : « Elle est au dernier étage... dépêche-toi... »",[
-   {label:"Retour au hall",action:hall}
-  ]);
- }},
- {label:"Retour au hall",action:hall}
- ]);
-}
+ camera.position.copy(player);
 
-function upstairs(){
- monster++;
- if(monster>=3 && !items.includes("Lampe torche")){
-  show("Le couloir","👹",
-  "UNE OMBRE SURGIT ! Julien ne voit rien dans le noir. Le monstre l'attrape... GAME OVER.",
-  [{label:"Recommencer",action:reset}]);
-  return;
+ // Le monstre avance vers Julien
+ const toPlayer=new THREE.Vector3(
+  player.x-monster.position.x,0,player.z-monster.position.z
+ );
+ const dist=toPlayer.length();
+ if(dist>1.4){
+  toPlayer.normalize();
+  monster.position.addScaledVector(toPlayer,dt*(hasKey?1.65:1.15));
+  monster.rotation.y=Math.atan2(toPlayer.x,toPlayer.z);
  }
- show("Le couloir","🕯️",
- "Un long couloir sombre. Une porte est fermée par une serrure. Des griffures couvrent les murs...",
- [
- {label:"🔑 Essayer la petite clé",action:bedroom},
- {label:"Retourner en bas",action:hall}
- ]);
-}
+ monster.position.y=.05+Math.sin(performance.now()*.004)*.06;
 
-function bedroom(){
- if(!items.includes("Petite clé")){
-  show("La porte verrouillée","🔒",
-  "La porte est fermée. Il te faut une clé !",
-  [{label:"Retour au couloir",action:upstairs}]);
-  return;
+ if(dist<1.25){
+  ended=true;
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('panel').innerHTML=
+   "<h1>IL T'A ATTRAPÉ !</h1><p>Le monstre a trouvé Julien... Émilie attend toujours son sauveur.</p><button id='again'>RÉESSAYER</button>";
+  document.getElementById('again').onclick=()=>location.reload();
  }
- show("La chambre","🛏️",
- "La porte s'ouvre lentement. Julien trouve une photo d'Émilie et un message : « Trouve la clé rouge pour me libérer. »",
- [
- {label:"🔴 Chercher la clé rouge",action:redkey},
- {label:"Retour au couloir",action:upstairs}
- ]);
+ if(dist<5&&dist>=1.25)setMessage("👹 IL EST TOUT PRÈS ! COURS !");
+ if(!hasKey&&distance(player,keyGroup.position)<2.1)
+  setMessage("🔑 Tu vois quelque chose au sol ! Appuie sur ACTION.");
+ if(distance(player,door.position)<3)
+  setMessage(hasKey?"🚪 Utilise ACTION pour ouvrir la porte !":"La sortie est verrouillée...");
 }
 
-function redkey(){
- if(!items.includes("Clé rouge"))items.push("Clé rouge");
- show("La chambre","🔴",
- "Julien découvre la clé rouge cachée sous un oreiller. Soudain, un cri retentit derrière la porte !",
- [
- {label:"Courir vers la cave",action:basement}
- ]);
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.05);
+ update(dt);
+ renderer.render(scene,camera);
 }
+animate();
 
-function basement(){
- show("La cave","🕳️",
- "Julien descend les escaliers. Il entend Émilie pleurer derrière une lourde porte. Une silhouette approche...",
- [
- {label:"Utiliser la clé rouge",action:rescue},
- {label:"Se cacher",action:()=>{
-  show("La cave","👹","Le monstre passe tout près... Julien retient son souffle !",[
-   {label:"Ouvrir la porte avec la clé rouge",action:rescue}
-  ]);
- }}
- ]);
-}
-
-function rescue(){
- show("Enfin réunis","❤️",
- "La porte s'ouvre ! ÉMILIE EST LÀ ! Julien la prend dans ses bras. Mais derrière eux, le monstre pousse un hurlement... Ils doivent fuir ensemble !",
- [
- {label:"🏃 S'enfuir tous les deux !",action:escape}
- ]);
-}
-
-function escape(){
- show("LA FIN","❤️🏃",
- "Julien et Émilie sortent de la maison juste à temps ! Vous êtes enfin réunis. Vous avez survécu à cette nuit d'horreur. FIN... POUR LE MOMENT 👀",
- [
- {label:"Rejouer l'aventure",action:reset}
- ]);
-}
-
-function reset(){
- items=[];
- monster=0;
- start();
-}
+addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
 </script>
 </body>
 </html>
+
